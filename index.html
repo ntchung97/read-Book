@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Trình đọc sách</title>
+  <style>
+    body { margin:0; font-family: Arial, sans-serif; background:#f4f4f4; color:#000; }
+    header { background:#333; color:#fff; padding:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    header input, header button { padding:5px; }
+    #viewer { width:100%; height:calc(100vh - 100px); overflow:auto; padding:10px; background:#fff; }
+    .dark { background:#121212; color:#ddd; }
+    #sidePanel { background:#eee; padding:10px; height:100px; overflow:auto; display:flex; gap:20px; }
+    .note, .bookmark { margin:5px 0; padding:5px; border:1px solid #ccc; background:#fff; }
+  </style>
+</head>
+<body>
+  <header>
+    <input type="file" id="fileInput" />
+    <button onclick="prevPage()">◀ Trang trước</button>
+    <button onclick="nextPage()">Trang sau ▶</button>
+    <button onclick="zoomIn()">Zoom +</button>
+    <button onclick="zoomOut()">Zoom -</button>
+    <input type="text" id="searchBox" placeholder="Tìm kiếm...">
+    <button onclick="searchText()">Tìm</button>
+    <button onclick="addBookmark()">📑 Bookmark</button>
+    <button onclick="addNote()">📝 Ghi chú</button>
+    <button onclick="toggleTheme()">🌙/☀</button>
+    <button onclick="exportData()">⬇ Xuất</button>
+    <input type="file" id="importFile" onchange="importData(event)" />
+  </header>
+
+  <div id="viewer"></div>
+
+  <div id="sidePanel">
+    <div id="toc"></div>
+    <div id="bookmarks"></div>
+    <div id="notes"></div>
+  </div>
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <!-- EPUB.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.88/epub.min.js"></script>
+
+  <script>
+    let pdfDoc=null, pageNum=1, scale=1.0, currentFile=null;
+    let viewer=document.getElementById("viewer");
+    let themeDark=false, rendition=null, book=null;
+
+    document.getElementById("fileInput").addEventListener("change", handleFile);
+
+    // ===== Xử lý mở file =====
+    function handleFile(e){
+      const file=e.target.files[0];
+      if(!file) return;
+      currentFile=file.name;
+      localStorage.setItem("currentFile", currentFile);
+      const url=URL.createObjectURL(file);
+      viewer.innerHTML="";
+      document.getElementById("toc").innerHTML="";
+      if(file.type==="application/pdf"){ renderPDF(url); }
+      else if(file.name.endsWith(".epub")){ renderEPUB(url); }
+      else if(file.type.startsWith("text")){ renderTXT(file); }
+      else{ alert("Định dạng chưa hỗ trợ"); }
+      loadBookmarks(); loadNotes();
+    }
+
+    // ===== PDF =====
+    async function renderPDF(url){
+      pdfDoc=await pdfjsLib.getDocument(url).promise;
+      pageNum=1; renderPage(pageNum);
+    }
+    async function renderPage(num){
+      const page=await pdfDoc.getPage(num);
+      const viewport=page.getViewport({scale:scale});
+      const canvas=document.createElement("canvas");
+      const ctx=canvas.getContext("2d");
+      canvas.height=viewport.height; canvas.width=viewport.width;
+      viewer.innerHTML=""; viewer.appendChild(canvas);
+      await page.render({canvasContext:ctx, viewport:viewport}).promise;
+    }
+    function nextPage(){ if(pdfDoc && pageNum<pdfDoc.numPages){ pageNum++; renderPage(pageNum); } if(rendition) rendition.next(); }
+    function prevPage(){ if(pdfDoc && pageNum>1){ pageNum--; renderPage(pageNum); } if(rendition) rendition.prev(); }
+    function zoomIn(){ if(pdfDoc){ scale+=0.2; renderPage(pageNum);} }
+    function zoomOut(){ if(pdfDoc){ scale=Math.max(0.5, scale-0.2); renderPage(pageNum);} }
+
+    // ===== EPUB =====
+    function renderEPUB(url){
+      book=ePub(url);
+      rendition=book.renderTo(viewer,{width:"100%", height:"100%"});
+      rendition.display();
+      book.loaded.navigation.then(function(toc){
+        let html="<h3>Mục lục</h3>";
+        toc.forEach(ch=>{ html+=`<div><a href='#' onclick="rendition.display('${ch.href}')">${ch.label}</a></div>`; });
+        document.getElementById("toc").innerHTML=html;
+      });
+    }
+
+    // ===== TXT =====
+    function renderTXT(file){
+      const reader=new FileReader();
+      reader.onload=function(e){ viewer.textContent=e.target.result; }
+      reader.readAsText(file);
+    }
+
+    // ===== Theme =====
+    function toggleTheme(){
+      themeDark=!themeDark;
+      document.body.classList.toggle("dark", themeDark);
+      viewer.classList.toggle("dark", themeDark);
+    }
+
+    // ===== Tìm kiếm =====
+    function searchText(){
+      let query=document.getElementById("searchBox").value.trim();
+      if(!query) return;
+      if(viewer.textContent){
+        let regex=new RegExp(query,"gi");
+        viewer.innerHTML=viewer.textContent.replace(regex, m=>`<mark>${m}</mark>`);
+      } else {
+        alert("Tìm kiếm chỉ hoạt động với TXT/EPUB text.");
+      }
+    }
+
+    // ===== Bookmark =====
+    function addBookmark(){
+      if(!currentFile) return;
+      let bookmarks=JSON.parse(localStorage.getItem("bookmarks")||"{}");
+      if(!bookmarks[currentFile]) bookmarks[currentFile]=[];
+      bookmarks[currentFile].push({ page: pageNum, time: new Date().toLocaleString() });
+      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
+      loadBookmarks();
+    }
+    function loadBookmarks(){
+      let bookmarks=JSON.parse(localStorage.getItem("bookmarks")||"{}");
+      let list=bookmarks[currentFile]||[];
+      document.getElementById("bookmarks").innerHTML="<h3>📑 Bookmark:</h3>"+list.map(b=>`<div class="bookmark">Trang: ${b.page} (${b.time})</div>`).join("");
+    }
+
+    // ===== Notes =====
+    function addNote(){
+      if(!currentFile) return;
+      let text=prompt("Nhập ghi chú:");
+      if(!text) return;
+      let notes=JSON.parse(localStorage.getItem("notes")||"{}");
+      if(!notes[currentFile]) notes[currentFile]=[];
+      notes[currentFile].push({ page: pageNum, note: text, time:new Date().toLocaleString() });
+      localStorage.setItem("notes", JSON.stringify(notes));
+      loadNotes();
+    }
+    function loadNotes(){
+      let notes=JSON.parse(localStorage.getItem("notes")||"{}");
+      let list=notes[currentFile]||[];
+      document.getElementById("notes").innerHTML="<h3>📝 Ghi chú:</h3>"+list.map(n=>`<div class="note">[Trang ${n.page}] ${n.note} <i>${n.time}</i></div>`).join("");
+    }
+
+    // ===== Xuất / Nhập dữ liệu =====
+    function exportData(){
+      let data={ bookmarks: JSON.parse(localStorage.getItem("bookmarks")||"{}"),
+                 notes: JSON.parse(localStorage.getItem("notes")||"{}") };
+      let blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+      let a=document.createElement("a");
+      a.href=URL.createObjectURL(blob);
+      a.download="reader-data.json";
+      a.click();
+    }
+    function importData(event){
+      const file=event.target.files[0];
+      if(!file) return;
+      const reader=new FileReader();
+      reader.onload=function(e){
+        try{
+          let data=JSON.parse(e.target.result);
+          if(data.bookmarks) localStorage.setItem("bookmarks", JSON.stringify(data.bookmarks));
+          if(data.notes) localStorage.setItem("notes", JSON.stringify(data.notes));
+          loadBookmarks(); loadNotes();
+          alert("Nhập dữ liệu thành công!");
+        } catch(err){ alert("File không hợp lệ"); }
+      };
+      reader.readAsText(file);
+    }
+  </script>
+</body>
+</html>
