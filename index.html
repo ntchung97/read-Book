@@ -2,48 +2,62 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Trình đọc sách by NTC</title>
+  <title>Trình đọc sách nâng cao</title>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      color: #000;
-    }
-    header {
-      background: #333;
-      color: #fff;
-      padding: 10px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    header input, header button {
-      padding: 5px 8px;
-      cursor: pointer;
-    }
-    #viewer {
-      width: 100%;
-      height: calc(100vh - 60px);
-      overflow: auto;
-      padding: 10px;
-      background: #fff;
-    }
-    .dark {
-      background: #121212;
-      color: #ddd;
-    }
-    canvas {
-      display: block;
-      margin: 0 auto 20px auto;
-      box-shadow: 0 0 6px rgba(0,0,0,0.3);
-    }
-  </style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    color: #000;
+    transition: background 0.3s, color 0.3s;
+  }
+  header {
+    background: #333;
+    color: #fff;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  header input, header button {
+    padding: 5px 8px;
+    cursor: pointer;
+  }
+  #viewer {
+    width: 100%;
+    height: calc(100vh - 60px);
+    overflow: auto;
+    padding: 10px;
+    background: #fff;
+    transition: background 0.3s, color 0.3s;
+  }
+  canvas {
+    display: block;
+    margin: 0 auto 20px auto;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+  }
+
+  /* 🌙 Dark mode */
+  body.dark {
+    background: #121212;
+    color: #eee;
+  }
+  body.dark header {
+    background: #222;
+    color: #fff;
+  }
+  body.dark #viewer {
+    background: #1e1e1e;
+    color: #ddd;
+  }
+</style>
+
 </head>
 <body>
   <header>
     <input type="file" id="fileInput" />
+    <button onclick="toggleTheme()">🌙/☀️</button>
     <button onclick="zoomIn()">Zoom +</button>
     <button onclick="zoomOut()">Zoom -</button>
     <button onclick="toggleScrollMode()">Chế độ: <span id="scrollMode">Trang đơn</span></button>
